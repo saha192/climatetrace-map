@@ -81,12 +81,15 @@
 
     const layers = {};
     const sectorTotals = {};
+    const sectorCounts = {};   // 🔹 NEW
 
     /* ================= LOAD CSVs ================= */
     function loadSector(sectorName, config) {
       const layer = L.layerGroup();
       layers[sectorName] = layer;
+
       let sectorSum = 0;
+      let plantCount = 0;
 
       Papa.parse(config.file, {
         download: true,
@@ -98,6 +101,7 @@
 
             const emissions = row.total_co2_emissions_2024 || 0;
             sectorSum += emissions;
+            plantCount++;
 
             const radius = Math.max(3, Math.log(emissions + 1));
 
@@ -111,7 +115,6 @@
                 weight: 0
               }
             )
-            /* ---- HOVER TOOLTIP ---- */
             .bindTooltip(
               `
               <strong>${row.source_name}</strong><br>
@@ -124,7 +127,6 @@
                 opacity: 0.9
               }
             )
-            /* ---- CLICK POPUP ---- */
             .bindPopup(`
               <strong>${row.source_name}</strong><br>
               Sector: ${sectorName}<br>
@@ -132,7 +134,6 @@
               Source ID: ${row.source_id}
             `);
 
-            /* ---- HOVER HIGHLIGHT ---- */
             marker.on("mouseover", function () {
               this.setStyle({ weight: 2, fillOpacity: 0.9 });
             });
@@ -144,8 +145,11 @@
           });
 
           sectorTotals[sectorName] = sectorSum;
+          sectorCounts[sectorName] = plantCount;
+
           layer.addTo(map);
-          updateTotalControl();
+          updateTotalCO2();
+          updatePlantCount();
         }
       });
     }
@@ -170,15 +174,15 @@
     legend.addTo(map);
 
     /* ================= TOTAL CO₂ CONTROL ================= */
-    const totalControl = L.control({ position: "bottomleft" });
+    const totalCO2Control = L.control({ position: "bottomleft" });
 
-    totalControl.onAdd = function () {
+    totalCO2Control.onAdd = function () {
       this._div = L.DomUtil.create("div", "legend");
       this.update(0);
       return this._div;
     };
 
-    totalControl.update = function (totalTonnes) {
+    totalCO2Control.update = function (totalTonnes) {
       const mt = totalTonnes / 1e6;
       this._div.innerHTML = `
         <strong>Total CO₂ (2024)</strong><br>
@@ -186,19 +190,51 @@
       `;
     };
 
-    totalControl.addTo(map);
+    totalCO2Control.addTo(map);
 
-    function updateTotalControl() {
+    function updateTotalCO2() {
       let total = 0;
       Object.keys(layers).forEach(sector => {
         if (map.hasLayer(layers[sector])) {
           total += sectorTotals[sector] || 0;
         }
       });
-      totalControl.update(total);
+      totalCO2Control.update(total);
     }
 
-    map.on("overlayadd overlayremove", updateTotalControl);
+    /* ================= PLANT COUNT CONTROL ================= */
+    const plantCountControl = L.control({ position: "bottomright" });
+
+    plantCountControl.onAdd = function () {
+      this._div = L.DomUtil.create("div", "legend");
+      this.update(0);
+      return this._div;
+    };
+
+    plantCountControl.update = function (count) {
+      this._div.innerHTML = `
+        <strong>Total Plants</strong><br>
+        ${count.toLocaleString()}
+      `;
+    };
+
+    plantCountControl.addTo(map);
+
+    function updatePlantCount() {
+      let count = 0;
+      Object.keys(layers).forEach(sector => {
+        if (map.hasLayer(layers[sector])) {
+          count += sectorCounts[sector] || 0;
+        }
+      });
+      plantCountControl.update(count);
+    }
+
+    /* ================= EVENTS ================= */
+    map.on("overlayadd overlayremove", function () {
+      updateTotalCO2();
+      updatePlantCount();
+    });
   </script>
 </body>
 </html>
