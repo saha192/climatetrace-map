@@ -46,16 +46,15 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <script>
+    /* ---------------- MAP ---------------- */
     const map = L.map("map").setView([22.5, 79], 5);
 
-  L.tileLayer(
-    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    {
-      attribution: "Tiles © Esri"
-    }
-  ).addTo(map);
-  
+    L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      { attribution: "Tiles © Esri" }
+    ).addTo(map);
 
+    /* ---------------- SECTORS ---------------- */
     const sectors = {
       Power: {
         file: "data/co2_emissions_2024_summary_power.csv",
@@ -80,10 +79,13 @@
     };
 
     const layers = {};
+    const sectorTotals = {};
 
+    /* ---------------- LOAD CSVs ---------------- */
     function loadSector(sectorName, config) {
       const layer = L.layerGroup();
       layers[sectorName] = layer;
+      let sectorSum = 0;
 
       Papa.parse(config.file, {
         download: true,
@@ -94,6 +96,7 @@
             if (!row.lat || !row.lon) return;
 
             const emissions = row.total_co2_emissions_2024 || 0;
+            sectorSum += emissions;
 
             const radius = Math.max(3, Math.log(emissions + 1));
 
@@ -116,7 +119,9 @@
             marker.addTo(layer);
           });
 
+          sectorTotals[sectorName] = sectorSum;
           layer.addTo(map);
+          updateTotalControl();
         }
       });
     }
@@ -125,8 +130,10 @@
       loadSector(name, cfg);
     });
 
+    /* ---------------- LAYER CONTROL ---------------- */
     L.control.layers(null, layers, { collapsed: false }).addTo(map);
 
+    /* ---------------- LEGEND ---------------- */
     const legend = L.control({ position: "bottomright" });
     legend.onAdd = function () {
       const div = L.DomUtil.create("div", "legend");
@@ -137,6 +144,38 @@
       return div;
     };
     legend.addTo(map);
+
+    /* ---------------- TOTAL CO₂ CONTROL ---------------- */
+    const totalControl = L.control({ position: "bottomleft" });
+
+    totalControl.onAdd = function () {
+      this._div = L.DomUtil.create("div", "legend");
+      this.update(0);
+      return this._div;
+    };
+
+    totalControl.update = function (totalTonnes) {
+      const mt = totalTonnes / 1e6;
+      this._div.innerHTML = `
+        <strong>Total CO₂ (2024)</strong><br>
+        ${mt.toLocaleString(undefined, { maximumFractionDigits: 2 })} Mt CO₂
+      `;
+    };
+
+    totalControl.addTo(map);
+
+    /* ---------------- UPDATE TOTAL ---------------- */
+    function updateTotalControl() {
+      let total = 0;
+      Object.keys(layers).forEach(sector => {
+        if (map.hasLayer(layers[sector])) {
+          total += sectorTotals[sector] || 0;
+        }
+      });
+      totalControl.update(total);
+    }
+
+    map.on("overlayadd overlayremove", updateTotalControl);
   </script>
 </body>
 </html>
