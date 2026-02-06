@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>India CO₂ Emissions Map (Climate Trace Style)</title>
+
+  <!-- Leaflet -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont;
+    }
+    #map {
+      width: 100vw;
+      height: 100vh;
+    }
+    .legend {
+      background: white;
+      padding: 10px;
+      border-radius: 6px;
+      line-height: 1.6;
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+    }
+    .legend span {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      margin-right: 6px;
+    }
+  </style>
+</head>
+
+<body>
+<div id="map"></div>
+
+<!-- Scripts -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+<script>
+  // Initialize map (India focus)
+  const map = L.map("map").setView([22.5, 79], 5);
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "&copy; OpenStreetMap contributors"
+  }).addTo(map);
+
+  // Sector configuration
+  const sectors = {
+    Power: {
+      file: "data/co2_emissions_2024_summary_power.csv",
+      color: "#00bcd4"
+    },
+    Cement: {
+      file: "data/co2_emissions_2024_summary_cement.csv",
+      color: "#ff9800"
+    },
+    Steel: {
+      file: "data/co2_emissions_2024_summary_steel.csv",
+      color: "#9c27b0"
+    },
+    Refinery: {
+      file: "data/co2_emissions_2024_summary_refinery.csv",
+      color: "#4caf50"
+    },
+    Fertilisers: {
+      file: "data/co2_emissions_2024_summary_fertilisers.csv",
+      color: "#f44336"
+    }
+  };
+
+  const layers = {};
+
+  function loadCSV(sectorName, config) {
+    const layer = L.layerGroup();
+    layers[sectorName] = layer;
+
+    Papa.parse(config.file, {
+      download: true,
+      header: true,
+      dynamicTyping: true,
+      complete: function (results) {
+        results.data.forEach(row => {
+          if (!row.lat || !row.lon) return;
+
+          const emissions = row.total_co2_emissions_2024 || 0;
+
+          const marker = L.circleMarker(
+            [row.lat, row.lon],
+            {
+              radius: Math.max(3, Math.log(emissions + 1)),
+              color: config.color,
+              fillColor: config.color,
+              fillOpacity: 0.7,
+              weight: 0
+            }
+          ).bindPopup(`
+            <strong>${row.source_name || "Unknown Source"}</strong><br>
+            Sector: ${sectorName}<br>
+            CO₂ (2024): ${emissions.toLocaleString()} t<br>
+            Source ID: ${row.source_id}
+          `);
+
+          marker.addTo(layer);
+        });
+
+        layer.addTo(map);
+      }
+    });
+  }
+
+  // Load all sector layers
+  Object.entries(sectors).forEach((
