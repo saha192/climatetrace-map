@@ -47,6 +47,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <script>
+
     /* ================= MAP ================= */
     const map = L.map("map").setView([22.5, 79], 5);
 
@@ -81,7 +82,10 @@
 
     const layers = {};
     const sectorTotals = {};
-    const sectorCounts = {};   // 🔹 NEW
+    const sectorCounts = {};
+
+    const MIN_RADIUS = 3;
+    const MAX_RADIUS = 30;
 
     /* ================= LOAD CSVs ================= */
     function loadSector(sectorName, config) {
@@ -90,12 +94,23 @@
 
       let sectorSum = 0;
       let plantCount = 0;
+      let maxEmission = 0;
 
       Papa.parse(config.file, {
         download: true,
         header: true,
         dynamicTyping: true,
         complete: function (results) {
+
+          /* ---- FIRST PASS: FIND MAX EMISSION ---- */
+          results.data.forEach(row => {
+            const emissions = row.total_co2_emissions_2024 || 0;
+            if (emissions > maxEmission) {
+              maxEmission = emissions;
+            }
+          });
+
+          /* ---- SECOND PASS: CREATE MARKERS ---- */
           results.data.forEach(row => {
             if (!row.lat || !row.lon) return;
 
@@ -103,12 +118,16 @@
             sectorSum += emissions;
             plantCount++;
 
-            const radius = Math.max(3, Math.log(emissions + 1));
+            // Square-root scaling (area proportional)
+            const radius =
+              MIN_RADIUS +
+              Math.sqrt(emissions / maxEmission) *
+              (MAX_RADIUS - MIN_RADIUS);
 
             const marker = L.circleMarker(
               [row.lat, row.lon],
               {
-                radius,
+                radius: radius,
                 color: config.color,
                 fillColor: config.color,
                 fillOpacity: 0.7,
@@ -203,7 +222,7 @@
     }
 
     /* ================= PLANT COUNT CONTROL ================= */
-    const plantCountControl = L.control({ position: "bottomright" });
+    const plantCountControl = L.control({ position: "topright" });
 
     plantCountControl.onAdd = function () {
       this._div = L.DomUtil.create("div", "legend");
@@ -235,6 +254,7 @@
       updateTotalCO2();
       updatePlantCount();
     });
+
   </script>
 </body>
 </html>
